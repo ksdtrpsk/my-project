@@ -1,0 +1,27 @@
+{
+  "name": "college-book-pickup-queue",
+  "version": "18.3.0",
+  "private": true,
+  "description": "Student-code initial passwords and first-login change",
+  "scripts": {
+    "start": "node server.js",
+    "seed:student": "node backend/scripts/seed-student.js",
+    "seed:admin": "node backend/scripts/seed-admin.js",
+    "test": "node --test backend/tests/*.test.js",
+    "migrate:phase8": "node backend/scripts/migrate-phase8.js",
+    "migrate:phase14": "node backend/scripts/migrate-phase14.js",
+    "migrate:student-password": "node backend/scripts/migrate-student-password.js",
+    "reset:student-passwords": "node backend/scripts/reset-student-passwords.js"
+  },
+  "dependencies": {
+    "jsqr": "1.4.0",
+    "mysql2": "^3.14.0",
+    "qrcode": "1.5.4"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "pngjs": "7.0.0"
+  }
+}
