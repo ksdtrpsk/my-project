@@ -22,8 +22,8 @@ function createStudentDirectory(pool){
 }
 function createStudentDirectoryApi({directory,admins,sessions,adminSessions}){
  return async(req,res)=>{
-  const session=adminSessions.read(req);if(!session)throw problem(sessions.read(req)?403:401,'เฉพาะเจ้าหน้าที่ที่เข้าสู่ระบบ');
-  if(!await admins.findProfile(session.studentId)){adminSessions.destroy(req,res);throw problem(401,'กรุณาเข้าสู่ระบบใหม่');}
+  const session=await adminSessions.read(req);if(!session)throw problem(await sessions.read(req)?403:401,'เฉพาะเจ้าหน้าที่ที่เข้าสู่ระบบ');
+  if(!await admins.findProfile(session.studentId)){await adminSessions.destroy(req,res);throw problem(401,'กรุณาเข้าสู่ระบบใหม่');}
   const url=new URL(req.url,'http://localhost'),route=url.pathname;
   if(!['GET','HEAD'].includes(req.method)&&((req.headers.origin&&req.headers.origin!==requestOrigin(req))||req.headers['sec-fetch-site']==='cross-site'))throw problem(403,'ไม่อนุญาตคำขอจากเว็บไซต์อื่น');
   if(route==='/api/admin/students'&&req.method==='GET')return json(res,200,await directory.list(url.searchParams));

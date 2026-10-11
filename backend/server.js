@@ -1,3 +1,4 @@
+const { createMysqlSessions } = require('./mysql-sessions');
 const { allowedHost, requestOrigin } = require('./request-origin');
 // Retains Phase 1 static serving and adds Phase 3 student authentication.
 const http = require('node:http');
@@ -60,7 +61,7 @@ return http.createServer({requestTimeout:30000,headersTimeout:15000,keepAliveTim
   if (pathname.startsWith('/api/')) {
     try {
       if(pathname.startsWith('/api/student/')){
-        const current=sessions.read(req);
+        const current=await sessions.read(req);
         if(current&&(await students.findProfile(current.studentId))?.must_change_password)return json(res,403,{message:'กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนใช้งาน',code:'PASSWORD_CHANGE_REQUIRED'});
       }
       if(handlePasswords&&(pathname==='/api/auth/password'||pathname==='/api/admin/auth/password'||/^\/api\/admin\/students\/\d+\/password$/.test(pathname)))return await handlePasswords(req,res,pathname);
@@ -100,13 +101,13 @@ return http.createServer({requestTimeout:30000,headersTimeout:15000,keepAliveTim
     const adminPage=normalized==='/dashboard.html'||(normalized.startsWith('/admin-')&&normalized!=='/admin-login.html');
     if(adminPage||protectedPages.has(normalized)){
       const store=adminPage?adminSessions:sessions;
-      const session=store.read(req);
+      const session=await store.read(req);
       const repository=adminPage?admins:students;
       let account=null;
       try{if(session&&repository)account=await repository.findProfile(session.studentId);}
       catch{return json(res,503,{message:'ติดต่อระบบไม่ได้ กรุณาลองใหม่ภายหลัง'});}
       if(!account){
-        if(session)store.destroy(req,res);
+        if(session)await store.destroy(req,res);
         res.writeHead(302,{Location:adminPage?'/admin-login.html':'/index.html'});return res.end();
       }
     }
@@ -124,15 +125,21 @@ return http.createServer({requestTimeout:30000,headersTimeout:15000,keepAliveTim
 async function start() {
   const config = readConfig();
   const pool = createDatabase(config.database);
+  let startupStage = 'connect';
   try {
     const connection = await pool.getConnection();
+    startupStage = 'schema-check';
     try {
       await connection.query("SET SESSION time_zone = '+07:00'");
       // Verify the Phase 2 tables needed by login before opening the server.
       await createStudentRepository(connection).findProfile(0);
       await connection.query('SELECT received_at FROM bookings LIMIT 0');
+      await connection.query('SELECT token_hash FROM app_sessions LIMIT 0');
     } finally { connection.release(); }
   } catch (error) {
+    // Log only a bounded diagnostic code; never log SQL or connection credentials.
+    const code = /^[A-Z0-9_]{1,80}$/.test(error.code || '') ? error.code : 'UNKNOWN';
+    console.error('[database-startup]', JSON.stringify({ stage: startupStage, code, tlsEnabled: Boolean(config.database.ssl) }));
     await pool.end();
     if(error.code==='ER_BAD_FIELD_ERROR'&&String(error.sqlMessage).includes('must_change_password'))throw new Error('ฐานข้อมูลยังไม่อัปเดต: รัน npm run migrate:student-password แล้วเริ่ม server ใหม่');
     if (error.code === 'ER_BAD_FIELD_ERROR') throw new Error('ฐานข้อมูลยังไม่พร้อมสำหรับ Phase 8: รัน npm run migrate:phase8 แล้วเริ่ม server ใหม่');
@@ -140,9 +147,9 @@ async function start() {
   }
   try { await pool.query('SELECT announcement_id,title,content,created_at FROM announcements LIMIT 0'); }
   catch { await pool.end(); throw new Error('ฐานข้อมูลประกาศยังไม่พร้อม: รัน npm run migrate:phase14 แล้วเริ่ม server ใหม่'); }
-  const server = createServer({ students: createStudentRepository(pool), sessions: createSessions({ ttlMs: config.sessionMs }),
+  const server = createServer({ students: createStudentRepository(pool), sessions: createMysqlSessions(pool, { ttlMs: config.sessionMs }),
     admins: createAdminRepository(pool), catalog: createCatalog(pool), slots: createSlots(pool), bookings: createBookings(pool), bookingQr: createBookingQr(pool), pickup: createPickup(pool), dashboard: createDashboard(pool), reports: createReports(pool), announcements: createAnnouncements(pool), directory:createStudentDirectory(pool), passwordManagement:createPasswordManagement(pool),
-    adminSessions: createSessions({ ttlMs: config.sessionMs, cookieName: 'book_queue_admin_session' }) });
+    adminSessions: createMysqlSessions(pool, { ttlMs: config.sessionMs, role: 'admin' }) });
   server.on('error', async (error) => {
     console.error('เปิดเซิร์ฟเวอร์ไม่ได้:', error.code);
     await pool.end();

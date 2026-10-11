@@ -7,15 +7,15 @@ function createCatalogApi({ catalog, students, admins, sessions, adminSessions }
     const url = new URL(req.url, 'http://localhost');
     if (pathname === '/api/student/book-sets') {
       if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return json(res, 405, { message: 'Method ไม่ถูกต้อง' }); }
-      const session = sessions.read(req);
+      const session = await sessions.read(req);
       if (!session) throw problem(401, 'กรุณาเข้าสู่ระบบนักศึกษา');
-      if (!await students.findProfile(session.studentId)) { sessions.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบใหม่'); }
+      if (!await students.findProfile(session.studentId)) { await sessions.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบใหม่'); }
       if (url.search) throw problem(400, 'ระบบเลือกชุดหนังสือจากบัญชี ไม่รับค่ากลุ่มหรือรหัสนักศึกษาจากคำขอ');
       return json(res, 200, { book_sets: await catalog.listSets(session.studentId) });
     }
-    const session = adminSessions.read(req);
-    if (!session) throw problem(sessions.read(req) ? 403 : 401, 'เฉพาะเจ้าหน้าที่ที่เข้าสู่ระบบเท่านั้น');
-    if (!await admins.findProfile(session.studentId)) { adminSessions.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบเจ้าหน้าที่ใหม่'); }
+    const session = await adminSessions.read(req);
+    if (!session) throw problem(await sessions.read(req) ? 403 : 401, 'เฉพาะเจ้าหน้าที่ที่เข้าสู่ระบบเท่านั้น');
+    if (!await admins.findProfile(session.studentId)) { await adminSessions.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบเจ้าหน้าที่ใหม่'); }
     if (!['GET', 'HEAD'].includes(req.method)) {
       if ((req.headers.origin && req.headers.origin !== requestOrigin(req)) || req.headers['sec-fetch-site'] === 'cross-site') throw problem(403, 'ไม่อนุญาตคำขอจากเว็บไซต์อื่น');
     }

@@ -6,10 +6,10 @@ function createSlotsApi({ slots, students, admins, sessions, adminSessions }) {
   return async (req, res, pathname) => {
     const studentRoute = pathname === '/api/student/booking-slots';
     const store = studentRoute ? sessions : adminSessions;
-    const session = store.read(req);
-    if (!session) throw problem(!studentRoute && sessions.read(req) ? 403 : 401, 'กรุณาเข้าสู่ระบบด้วยบัญชีที่มีสิทธิ์');
+    const session = await store.read(req);
+    if (!session) throw problem(!studentRoute && await sessions.read(req) ? 403 : 401, 'กรุณาเข้าสู่ระบบด้วยบัญชีที่มีสิทธิ์');
     if (!await (studentRoute ? students : admins).findProfile(session.studentId)) {
-      store.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบใหม่');
+      await store.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบใหม่');
     }
     const url = new URL(req.url, 'http://localhost');
     if ([...url.searchParams.keys()].some(key => key !== 'date') || url.searchParams.getAll('date').length > 1) throw problem(400, 'รับเฉพาะตัวกรอง date หนึ่งค่า');

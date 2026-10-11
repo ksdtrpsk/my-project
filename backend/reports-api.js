@@ -3,9 +3,9 @@ const {problem}=require('./catalog');
 const {reportCsv}=require('./reports');
 function createReportsApi({reports,admins,adminSessions,sessions}) {
   return async(req,res,pathname)=>{
-    const session=adminSessions.read(req);
-    if(!session)throw problem(sessions.read(req)?403:401,'เฉพาะเจ้าหน้าที่ที่เข้าสู่ระบบ');
-    if(!await admins.findProfile(session.studentId)){adminSessions.destroy(req,res);throw problem(401,'กรุณาเข้าสู่ระบบเจ้าหน้าที่ใหม่');}
+    const session=await adminSessions.read(req);
+    if(!session)throw problem(await sessions.read(req)?403:401,'เฉพาะเจ้าหน้าที่ที่เข้าสู่ระบบ');
+    if(!await admins.findProfile(session.studentId)){await adminSessions.destroy(req,res);throw problem(401,'กรุณาเข้าสู่ระบบเจ้าหน้าที่ใหม่');}
     if(!['/api/admin/reports/bookings','/api/admin/reports/bookings.csv'].includes(pathname))throw problem(404,'ไม่พบ API');
     if(req.method!=='GET'){res.setHeader('Allow','GET');throw problem(405,'Method ไม่ถูกต้อง');}
     const exporting=pathname.endsWith('.csv');

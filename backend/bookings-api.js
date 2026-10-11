@@ -3,9 +3,9 @@ const { json, readJson } = require('./auth');
 const { integer, problem } = require('./catalog');
 function createBookingsApi({ bookings, students, sessions, bookingQr }) {
   return async (req, res, pathname) => {
-    const session = sessions.read(req);
+    const session = await sessions.read(req);
     if (!session) throw problem(401, 'กรุณาเข้าสู่ระบบนักศึกษา');
-    if (!await students.findProfile(session.studentId)) { sessions.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบใหม่'); }
+    if (!await students.findProfile(session.studentId)) { await sessions.destroy(req, res); throw problem(401, 'กรุณาเข้าสู่ระบบใหม่'); }
     if (new URL(req.url, 'http://localhost').search) throw problem(400, 'ไม่รับตัวกรองหรือรหัสนักศึกษาจากคำขอ');
     const cancelMatch = /^\/api\/student\/bookings\/(\d+)\/cancel$/.exec(pathname);
     if (cancelMatch) {

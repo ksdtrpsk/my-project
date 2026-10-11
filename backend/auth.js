@@ -42,15 +42,15 @@ function createAuth({ students, sessions, now = Date.now, adminMode = false }) {
     }
     if (pathname === '/api/auth/logout') {
       objectInput(await readJson(req),[]);
-      sessions.destroy(req, res);
+      await sessions.destroy(req, res);
       return json(res, 200, { message: 'ออกจากระบบแล้ว' });
     }
     if (pathname === '/api/auth/me') {
-      const session = sessions.read(req);
+      const session = await sessions.read(req);
       if (!session) return json(res, 401, { message: 'กรุณาเข้าสู่ระบบใหม่' });
       const student = await students.findProfile(session.studentId);
       if (!student) {
-        sessions.destroy(req, res);
+        await sessions.destroy(req, res);
         return json(res, 401, { message: 'กรุณาเข้าสู่ระบบใหม่' });
       }
       return json(res, 200, adminMode ? { admin: student } : { student });
@@ -73,7 +73,7 @@ function createAuth({ students, sessions, now = Date.now, adminMode = false }) {
     }
     count.count += 1;
     attempts.set(key, count);
-    const revision = sessions.revision?.();
+    const revision = await sessions.revision?.();
     const account = await students.findCredentials(loginName);
     if (!await verifyPassword(body.password, account?.password)) {
       return json(res, 401, { message: adminMode ? 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' : 'รหัสนักศึกษาหรือรหัสผ่านไม่ถูกต้อง' });
@@ -82,8 +82,8 @@ function createAuth({ students, sessions, now = Date.now, adminMode = false }) {
     const student = await students.findProfile(accountId);
     if (!student) return json(res, 401, { message: 'รหัสนักศึกษาหรือรหัสผ่านไม่ถูกต้อง' });
     // Do not issue a session from credentials verified before a password change.
-    if (sessions.revision?.() !== revision) return json(res, 409, { message: 'มีการเปลี่ยนรหัสผ่านระหว่างเข้าสู่ระบบ กรุณาลองใหม่' });
-    sessions.create(req, res, accountId);
+    if (await sessions.revision?.() !== revision) return json(res, 409, { message: 'มีการเปลี่ยนรหัสผ่านระหว่างเข้าสู่ระบบ กรุณาลองใหม่' });
+    await sessions.create(req, res, accountId, account.password);
     attempts.delete(key);
     return json(res, 200, adminMode ? { admin: student } : { student });
   };

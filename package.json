@@ -11,7 +11,8 @@
     "migrate:phase8": "node backend/scripts/migrate-phase8.js",
     "migrate:phase14": "node backend/scripts/migrate-phase14.js",
     "migrate:student-password": "node backend/scripts/migrate-student-password.js",
-    "reset:student-passwords": "node backend/scripts/reset-student-passwords.js"
+    "reset:student-passwords": "node backend/scripts/reset-student-passwords.js",
+    "migrate:sessions": "node backend/scripts/migrate-sessions.js"
   },
   "dependencies": {
     "jsqr": "1.4.0",

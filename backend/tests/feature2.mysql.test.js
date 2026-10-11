@@ -1,3 +1,5 @@
+const {createMysqlSessions}=require('../mysql-sessions');
+const {migrateSessions}=require('../scripts/migrate-sessions');
 const {createPasswordManagement}=require('../password-management');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -67,7 +69,7 @@ test('Feature 2 real MySQL and HTTP integration (isolated database)', { skip: pr
     }
     await pool.execute('INSERT INTO admins (admin_id,username,password,name) VALUES (?,?,?,?)', [10,'testadmin',hash,'เจ้าหน้าที่ทดสอบ']);
     const catalog = createCatalog(pool);
-    server = createServer({ students: createStudentRepository(pool), admins: createAdminRepository(pool), catalog, directory:createStudentDirectory(pool), passwordManagement:createPasswordManagement(pool), announcements:createAnnouncements(pool,()=>Date.parse("2030-01-01T02:00:00Z")), reports:createReports(pool,()=>Date.parse('2030-01-01T02:00:00Z')), dashboard:createDashboard(pool,()=>Date.parse('2030-01-01T02:00:00Z')), pickup:createPickup(pool,()=>Date.parse('2030-01-01T02:00:00Z')), bookingQr: createBookingQr(pool), bookings: createBookings(pool, () => Date.parse('2030-01-01T02:00:00Z')), slots: createSlots(pool, () => Date.parse('2030-01-01T02:00:00Z')) });
+    server = createServer({ sessions:createMysqlSessions(pool),adminSessions:createMysqlSessions(pool,{role:'admin'}), students: createStudentRepository(pool), admins: createAdminRepository(pool), catalog, directory:createStudentDirectory(pool), passwordManagement:createPasswordManagement(pool), announcements:createAnnouncements(pool,()=>Date.parse("2030-01-01T02:00:00Z")), reports:createReports(pool,()=>Date.parse('2030-01-01T02:00:00Z')), dashboard:createDashboard(pool,()=>Date.parse('2030-01-01T02:00:00Z')), pickup:createPickup(pool,()=>Date.parse('2030-01-01T02:00:00Z')), bookingQr: createBookingQr(pool), bookings: createBookings(pool, () => Date.parse('2030-01-01T02:00:00Z')), slots: createSlots(pool, () => Date.parse('2030-01-01T02:00:00Z')) });
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     const base = `http://127.0.0.1:${server.address().port}`;
     async function request(route, method = 'GET', body, cookie = '', extra = {}) {
@@ -77,6 +79,25 @@ test('Feature 2 real MySQL and HTTP integration (isolated database)', { skip: pr
     }
     const adminCookie=(await request('/api/admin/auth/login','POST',{username:'testadmin',password})).cookie;
     const studentCookie=(await request('/api/auth/login','POST',{student_code:'900010',password})).cookie;
+    await t.test('Shared sessions survive instance changes; logout, expiry, role isolation and stale credentials work',async()=>{
+      await migrateSessions(pool);await migrateSessions(pool);
+      const other=createServer({students:createStudentRepository(pool),admins:createAdminRepository(pool),sessions:createMysqlSessions(pool),adminSessions:createMysqlSessions(pool,{role:'admin'})});
+      await new Promise(resolve=>other.listen(0,'127.0.0.1',resolve));
+      const otherBase='http://127.0.0.1:'+other.address().port;
+      try{
+        for(const [route,cookie] of [['/api/auth/me',studentCookie],['/api/admin/auth/me',adminCookie],['/home.html',studentCookie],['/dashboard.html',adminCookie]])assert.equal((await fetch(otherBase+route,{headers:{cookie},redirect:'manual'})).status,200);
+        assert.equal((await fetch(otherBase+'/api/admin/auth/me',{headers:{cookie:studentCookie}})).status,401);
+        const extra=(await request('/api/auth/login','POST',{student_code:'900010',password})).cookie;
+        assert.equal((await fetch(otherBase+'/api/auth/logout',{method:'POST',headers:{cookie:extra,'content-type':'application/json'},body:'{}'})).status,200);
+        assert.equal((await request('/api/auth/me','GET',undefined,extra)).status,401);
+        const store=createMysqlSessions(pool,{now:()=>0,ttlMs:1});let header;
+        await store.create({headers:{}},{setHeader:(k,v)=>header=v},10,hash);
+        assert.equal(await createMysqlSessions(pool).read({headers:{cookie:header.split(';')[0]}}),null);
+        await assert.rejects(createMysqlSessions(pool).create({headers:{}},{setHeader(){}},10,'stale-hash'),e=>e.status===409);
+        const [[counts]]=await pool.query('SELECT COUNT(*) AS count FROM app_sessions WHERE token_hash NOT REGEXP \'^[a-f0-9]{64}$\'');assert.equal(counts.count,0);
+      }finally{other.closeAllConnections();await new Promise(resolve=>other.close(resolve));}
+    });
+
 
 
 

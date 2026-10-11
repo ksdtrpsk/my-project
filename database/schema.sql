@@ -166,3 +166,14 @@ CREATE TABLE IF NOT EXISTS announcements (
     CONSTRAINT chk_announcements_content CHECK (CHAR_LENGTH(TRIM(content)) BETWEEN 1 AND 5000)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- Shared sessions across server instances.
+CREATE TABLE IF NOT EXISTS app_sessions (
+ token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+ role ENUM('student','admin') NOT NULL,
+ account_id INT UNSIGNED NOT NULL,
+ credential_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ expires_at BIGINT UNSIGNED NOT NULL,
+ INDEX idx_session_account (role, account_id),
+ INDEX idx_session_expiry (expires_at)
+) ENGINE=InnoDB;

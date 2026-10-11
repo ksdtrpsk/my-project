@@ -31,7 +31,7 @@ function createPasswordManagement(pool){
     if(!await verifyPassword(data.current_password,account.password))throw problem(400,'รหัสผ่านปัจจุบันไม่ถูกต้อง');
     if(data.new_password===data.current_password)throw problem(400,'รหัสผ่านใหม่ต้องต่างจากรหัสเดิม');
     if(!admin&&data.new_password===account.student_code)throw problem(400,'รหัสผ่านใหม่ต้องไม่ใช่รหัสนักศึกษา');
-    const hash=await hashPassword(data.new_password);authorize();
+    const hash=await hashPassword(data.new_password);await authorize(c);
     await c.execute(`UPDATE ${table} SET password=?${admin?'':',must_change_password=0'} WHERE ${key}=?`,[hash,id]);
    });
   },
@@ -46,7 +46,7 @@ function createPasswordManagement(pool){
     if(!target)throw problem(404,'ไม่พบนักศึกษา');
     if(target.student_code!==data.student_code)throw problem(409,'ข้อมูลนักศึกษาเปลี่ยนไป กรุณาเปิดรายการใหม่');
     if(await verifyPassword(data.new_password,target.password))throw problem(400,'รหัสผ่านใหม่ต้องต่างจากรหัสเดิมของนักศึกษา');
-    const hash=await hashPassword(data.new_password);authorize();
+    const hash=await hashPassword(data.new_password);await authorize(c);
     await c.execute('UPDATE students SET password=?,must_change_password=? WHERE student_id=?',[hash,data.new_password===target.student_code?1:0,studentId]);
    });
   }
@@ -58,9 +58,9 @@ function createPasswordManagementApi({passwordManagement,students,admins,session
   const reset=/^\/api\/admin\/students\/(\d+)\/password$/.exec(pathname);
   const admin=Boolean(reset)||pathname==='/api/admin/auth/password';
   const store=admin?adminSessions:sessions,repository=admin?admins:students;
-  const session=store.read(req);
-  if(!session)throw problem(admin&&sessions.read(req)?403:401,'กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกต้อง');
-  if(!await repository.findProfile(session.studentId)){store.destroy(req,res);throw problem(401,'กรุณาเข้าสู่ระบบใหม่');}
+  const session=await store.read(req);
+  if(!session)throw problem(admin&&await sessions.read(req)?403:401,'กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกต้อง');
+  if(!await repository.findProfile(session.studentId)){await store.destroy(req,res);throw problem(401,'กรุณาเข้าสู่ระบบใหม่');}
   if(req.method!=='POST'){res.setHeader('Allow','POST');throw problem(405,'ใช้ POST สำหรับเปลี่ยนรหัสผ่าน');}
   if((req.headers.origin&&req.headers.origin!==requestOrigin(req))||req.headers['sec-fetch-site']==='cross-site')throw problem(403,'ไม่อนุญาตคำขอจากเว็บไซต์อื่น');
   queryInput(new URL(req.url,'http://localhost').searchParams,[]);
@@ -71,14 +71,14 @@ function createPasswordManagementApi({passwordManagement,students,admins,session
   const bucket=attempts.get(key)||{count:0,expiresAt:now()+15*60*1000};
   if(bucket.count>=5){res.setHeader('Retry-After',Math.ceil((bucket.expiresAt-now())/1000));throw problem(429,'ลองรหัสผ่านหลายครั้งเกินไป กรุณารอ 15 นาที');}
   bucket.count++;attempts.set(key,bucket);
-  const authorize=()=>{if(store.read(req)!==session)throw problem(401,'เซสชันหมดอายุหรือถูกยกเลิก กรุณาเข้าสู่ระบบใหม่');};
+  const authorize=async(connection)=>{const current=await store.read(req,connection);if(!current || current.studentId!==session.studentId)throw problem(401,'เซสชันหมดอายุหรือถูกยกเลิก กรุณาเข้าสู่ระบบใหม่');};
   if(reset){
    const id=integer(Number(reset[1]),'นักศึกษา');
    await passwordManagement.reset(session.studentId,id,body,authorize);
-   sessions.revokeAccount(id);
+   await sessions.revokeAccount(id);
   }else{
    await passwordManagement.change(session.studentId,body,admin,authorize);
-   store.revokeAccount(session.studentId);store.destroy(req,res);
+   await store.revokeAccount(session.studentId);await store.destroy(req,res);
   }
   attempts.delete(key);
   return json(res,200,{message:reset?'รีเซ็ตรหัสนักศึกษาแล้ว กรุณาแจ้งรหัสใหม่ให้นักศึกษาเป็นส่วนตัว':'เปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบด้วยรหัสใหม่'});
