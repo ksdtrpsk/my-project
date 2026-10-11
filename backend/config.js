@@ -9,6 +9,12 @@ function readConfig() {
     if (!Number.isInteger(value) || value < 1 || value > max) throw new Error(`${name} ไม่ถูกต้อง`);
     return value;
   }
+  let ssl;
+  if (process.env.DB_SSL === 'true') {
+    const ca = process.env.DB_SSL_CA || (process.env.DB_SSL_CA_PATH ? fs.readFileSync(process.env.DB_SSL_CA_PATH, 'utf8') : '');
+    if (!ca.includes('-----BEGIN CERTIFICATE-----')) throw new Error('DB_SSL requires DB_SSL_CA or DB_SSL_CA_PATH containing the CA certificate');
+    ssl = { ca: ca.replace(/\\n/g, '\n'), rejectUnauthorized: true };
+  }
   return {
     port: integer('PORT', 3000, 65535),
     sessionMs: integer('SESSION_MINUTES', 60, 1440) * 60 * 1000,
@@ -18,6 +24,7 @@ function readConfig() {
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'college_book_queue',
+      ...(ssl ? { ssl } : {}),
       charset: 'utf8mb4', timezone: '+07:00',
       connectionLimit: 5, connectTimeout: 5000
     }
