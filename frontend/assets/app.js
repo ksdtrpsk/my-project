@@ -111,9 +111,23 @@ function dashboardView() {
   return `${dashboardStatsView()}<h2 class="section">เครื่องมือเจ้าหน้าที่</h2><div class="grid two"><section class="card"><h2>จัดการหนังสือ</h2><p class="muted">เพิ่ม แก้ไข ค้นหา และลบหนังสือของวิทยาลัย</p><a class="button" href="admin-books.html">เปิดรายการหนังสือ</a></section><section class="card"><h2>จัดชุดหนังสือ</h2><p class="muted">กำหนดหนังสือตามสาขา ระดับชั้น ห้อง ภาคเรียน และปีการศึกษา</p><a class="button" href="admin-book-sets.html">เปิดชุดหนังสือ</a></section><section class="card"><h2>รอบรับหนังสือ</h2><p class="muted">กำหนดวัน เวลา จำนวนที่รับได้ และเปิดหรือปิดรอบ</p><a class="button" href="admin-slots.html">จัดการรอบรับหนังสือ</a></section><section class="card"><h2>สแกนรับหนังสือ</h2><p class="muted">อ่าน QR ตรวจรายละเอียด และยืนยันการส่งมอบหนังสือ</p><a class="button" href="admin-scanner.html">เปิดหน้าสแกน</a></section></div>`;
 }
 
-function shell(content) {
-  return `<aside class="sidebar">${brand}<button class="menu-toggle" aria-expanded="false" aria-controls="navigation">เมนู</button><div class="nav-label">${admin ? 'พื้นที่เจ้าหน้าที่' : 'พื้นที่นักศึกษา'}</div><nav id="navigation" aria-label="เมนูหลัก">${menu.map(([id, href, title, icon]) => `<a href="${href}" ${id === page ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${icon}</span>${title}</a>`).join('')}<a href="${admin ? 'index.html' : 'admin-login.html'}">${admin ? 'หน้านักศึกษา' : 'หน้าเจ้าหน้าที่'}</a><a href="${admin ? 'admin-password.html' : 'change-password.html'}" ${['change-password','admin-password'].includes(page) ? 'aria-current="page"' : ''}>เปลี่ยนรหัสผ่าน</a><button type="button" class="button secondary" id="logout">ออกจากระบบ</button></nav><div class="sidebar-bottom">College Book Pickup<br>Queue Booking System</div></aside>
-    <div class="workspace"><header class="topbar"><span>${admin ? 'ระบบสำหรับเจ้าหน้าที่' : 'ระบบจองคิวรับหนังสือออนไลน์'}</span><span><small>${admin ? escapeHtml(adminAccount?.name) : fullName()}</small><span class="avatar" aria-hidden="true">${admin ? 'AD' : escapeHtml(student?.first_name?.slice(0, 1))}</span></span></header><main id="main"><div class="page-heading"><span class="eyebrow">${admin ? 'ADMIN' : 'STUDENT'} / BOOK QUEUE</span><h1>${titles[page]}</h1></div>${notice}<p id="page-message" role="status"></p>${content}<footer>ระบบจองคิวรับหนังสือออนไลน์สำหรับนักศึกษา · โครงงานระดับ ปวส.  </footer></main></div>`;
+function loadingView(failed = false) {
+  const content = failed
+    ? `<section class="card loading-card"><div class="loading-symbol" aria-hidden="true">!</div><h2>โหลดข้อมูลไม่สำเร็จ</h2><p class="muted" role="alert">กรุณาตรวจการเชื่อมต่อ แล้วลองอีกครั้ง</p><div class="actions"><button class="button" id="retry-loading" type="button">ลองใหม่</button><a class="button secondary" href="${admin ? 'admin-login.html' : 'index.html'}">กลับหน้าเข้าสู่ระบบ</a></div></section>`
+    : `<section class="card loading-card"><div class="loading-intro" role="status"><span class="loading-symbol" aria-hidden="true"><span class="loading-spinner"></span></span><div><h2>กำลังเตรียมข้อมูล</h2><p class="muted">รอสักครู่ ระบบกำลังโหลด${titles[page] || 'หน้านี้'}</p></div></div><div class="loading-preview" aria-hidden="true"><div class="loading-toolbar"><span class="skeleton skeleton-title"></span><span class="skeleton skeleton-button"></span></div>${Array.from({length: 5}, () => '<div class="loading-row"><span class="skeleton skeleton-dot"></span><div class="loading-lines"><span class="skeleton"></span><span class="skeleton skeleton-short"></span></div><span class="skeleton skeleton-action"></span></div>').join('')}</div></section>`;
+  // Only public page labels are displayed until authentication and data loading finish.
+  return shell(content, true);
+}
+function bindLoadingNavigation() {
+  document.querySelector('.menu-toggle')?.addEventListener('click', event => {
+    const open = event.currentTarget.getAttribute('aria-expanded') !== 'true';
+    event.currentTarget.setAttribute('aria-expanded', String(open));
+    document.getElementById('navigation').classList.toggle('is-open', open);
+  });
+}
+function shell(content, loading = false) {
+  return `<aside class="sidebar">${brand}<button class="menu-toggle" aria-expanded="false" aria-controls="navigation">เมนู</button><div class="nav-label">${admin ? 'พื้นที่เจ้าหน้าที่' : 'พื้นที่นักศึกษา'}</div><nav id="navigation" aria-label="เมนูหลัก">${menu.map(([id, href, title, icon]) => `<a href="${href}" ${id === page ? 'aria-current="page"' : ''}><span class="nav-icon" aria-hidden="true">${icon}</span>${title}</a>`).join('')}<a href="${admin ? 'index.html' : 'admin-login.html'}">${admin ? 'หน้านักศึกษา' : 'หน้าเจ้าหน้าที่'}</a><a href="${admin ? 'admin-password.html' : 'change-password.html'}" ${['change-password','admin-password'].includes(page) ? 'aria-current="page"' : ''}>เปลี่ยนรหัสผ่าน</a><button type="button" class="button secondary" id="logout" ${loading ? 'hidden' : ''}>ออกจากระบบ</button></nav><div class="sidebar-bottom">College Book Pickup<br>Queue Booking System</div></aside>
+    <div class="workspace"><header class="topbar"><span>${admin ? 'ระบบสำหรับเจ้าหน้าที่' : 'ระบบจองคิวรับหนังสือออนไลน์'}</span><span><small>${loading ? 'กำลังเตรียมหน้าเว็บ' : admin ? escapeHtml(adminAccount?.name) : fullName()}</small><span class="avatar" aria-hidden="true">${loading ? '…' : admin ? 'AD' : escapeHtml(student?.first_name?.slice(0, 1))}</span></span></header><main id="main"><div class="page-heading"><span class="eyebrow">${admin ? 'ADMIN' : 'STUDENT'} / BOOK QUEUE</span><h1>${titles[page]}</h1></div>${notice}<p id="page-message" role="status"></p>${content}<footer>ระบบจองคิวรับหนังสือออนไลน์สำหรับนักศึกษา · โครงงานระดับ ปวส.  </footer></main></div>`;
 }
 
 function ownPasswordView(){return `<section class="card">${student?.must_change_password ? '<p role="alert">กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนใช้งานระบบ รหัสใหม่อย่างน้อย 6 ตัว และต้องไม่ใช่รหัสนักศึกษา</p>' : ''}${passwordFormView()}</section>`;}
@@ -183,7 +197,8 @@ async function initialize() {
   const app = document.getElementById('app');
   bookingState.success = null; bookingState.uncertain = false; slotState.selected = null;
   if (!['login', 'admin-login'].includes(page)) {
-    app.textContent = 'กำลังโหลดข้อมูล…';
+    app.innerHTML = loadingView();
+    bindLoadingNavigation();
     try {
       const data = await api(admin ? '/api/admin/auth/me' : '/api/auth/me');
       if (admin) { adminAccount = data.admin; if(page!=='admin-password') await loadCatalog(); }
@@ -204,7 +219,9 @@ async function initialize() {
     } catch (error) {
       student = null; adminAccount = null; studentSets = []; ownBookings = [];
       if (error.status === 401) { window.location.replace(admin ? 'admin-login.html' : 'index.html'); return; }
-      app.innerHTML = `<main id="main"><h1>โหลดข้อมูลไม่สำเร็จ</h1><p>กรุณาตรวจการเชื่อมต่อ แล้วโหลดหน้าใหม่</p><a href="${admin ? 'admin-login.html' : 'index.html'}">กลับหน้าเข้าสู่ระบบ</a></main>`;
+      app.innerHTML = loadingView(true);
+      bindLoadingNavigation();
+      document.getElementById('retry-loading').addEventListener('click', initialize);
       return;
     }
   }
